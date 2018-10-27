@@ -1,2 +1,2 @@
 # recognize-me
-tracke and recognize face with nodejs
+track and recognize my face with nodejs
