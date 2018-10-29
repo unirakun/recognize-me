@@ -2,33 +2,40 @@ const http = require('http')
 const Koa = require('koa')
 const send = require('koa-send')
 const socket = require('socket.io')
-
-var cv = require('opencv4nodejs')
+const camera = require('./camera')
+const clients = require('./clients')
 
 const app = new Koa()
 
 app.use(async (ctx) => {
-  await send(ctx, ctx.path, { root: __dirname + '/../client'});
+  await send(ctx, ctx.path, { root: __dirname + '/../client' });
 })
-
-
-const encodeJpgBase64 = (img) => {
-  return cv.imencode('.jpg', img).toString('base64');
-}
 
 const server = http.createServer(app.callback())
 const io = socket(server)
 
-var camera = new cv.VideoCapture(0)
+const emitAll = async () => {
+  const img = await camera.decodeFrame()
+  if (!img) return
+  emitAll()
+  clients.get().forEach(client => {
+    client.emit('frame', img)
+  })
+}
 
-io.on('connection', (socket) => {
-  console.log('client connected')
-  setInterval(() => {
-    const img = camera.read()
-    socket.emit('frame', cv.imencode('.jpg', img).toString('base64'))
-  }, 1000)
+io.on('connection', async (socket) => {
+  clients.add(socket)
+  if (clients.firstConnected()) {
+    await camera.open()
+    emitAll()
+  }
 
-  socket.on('disconnect', () => console.log('client disconnected'))
+  socket.on('disconnect', () => {
+    clients.remove(socket)
+    if (clients.noConnected()) {
+      camera.release()
+    }
+  })
 })
 
 server.listen(3000, () => {
