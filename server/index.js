@@ -14,6 +14,14 @@ app.use(async (ctx) => {
 const server = http.createServer(app.callback())
 const io = socket(server)
 
+const emitFaces = async () => {
+  const { faces } = await camera.detectFaces()
+  if (!faces || faces.length === 0) return
+  clients.get().forEach(client => {
+    client.emit('facesDetected', faces)
+  })
+}
+
 const emitAll = async () => {
   const img = await camera.decodeFrame()
   if (!img) return
@@ -21,6 +29,7 @@ const emitAll = async () => {
   clients.get().forEach(client => {
     client.emit('frame', img)
   })
+  // emitFaces()
 }
 
 io.on('connection', async (socket) => {
