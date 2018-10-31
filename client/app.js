@@ -1,15 +1,38 @@
 const socket = io('http://localhost:3000')
 
-const canvas = document.getElementById('video')
-const context = canvas.getContext('2d')
-const img = new Image()
+const imgs = {}
+
+const createImg = id => {
+  const canvas = document.getElementById(id)
+  imgs[id] = {
+    canvas,
+    context: canvas.getContext('2d'),
+    img: new Image(),
+  }
+}
+
+createImg('video')
+createImg('face0')
+createImg('face1')
+
 
 socket.on('connect', () => console.log('connected'))
 socket.on('disconnect', console.log)
 
 socket.on('frame', (frame) => {
+  const { canvas, context, img } = imgs.video
   img.onload = function () {
     context.drawImage(this, 0, 0, canvas.width, canvas.height)
   }
   img.src = 'data:image/jpg;base64,' + frame
+})
+
+socket.on('facesDetected', (frame) => {
+  frame.forEach((f, i) => {
+    const { canvas, context, img } = imgs[`face${i}`]
+    img.onload = function () {
+      context.drawImage(this, 0, 0, canvas.width, canvas.height)
+    }
+    img.src = 'data:image/jpg;base64,' + frame
+  })
 })

@@ -1,15 +1,9 @@
 const cv = require('opencv4nodejs')
+const fr = require('face-recognition').withCv(cv)
 
 const FPS = 30
 let camera
-const classifier = new cv.CascadeClassifier(cv.HAAR_FRONTALFACE_ALT2)
-
-const tracker = new cv.TrackerBoosting()
-
-let faceDetected = false
-
-const getDate = () => Math.round(Date.now() / 1000)
-let date = getDate()
+const detector = fr.AsyncFaceDetector()
 
 const isOpen = () => {
   return camera && !camera.read().empty
@@ -23,34 +17,27 @@ const open = async () => {
   await camera.setAsync(cv.CAP_PROP_FRAME_HEIGHT, 1)
 }
 
+const readFrame = async () => {
+  const cvMat = await camera.readAsync()
+  if (cvMat.empty) return
+  return { cvMat, cvImg: fr.CvImage(cvMat) }
+}
+
 const decodeFrame = async () => {
-  const img = await camera.readAsync()
-  if (img.empty) return
+  const cvMat = await camera.readAsync()
+  if (cvMat.empty) return
+  return cv.imencode('.jpg', cvMat).toString('base64')
+}
 
-  const gray = await img.bgrToGrayAsync()
+const detectFaces = async () => {
+  const { cvMat, cvImg } = await readFrame()
 
-  const { objects, levelWeights } = await classifier.detectMultiScaleWithRejectLevelsAsync(gray)
-
-  if (date !== getDate()) {
-    date = getDate()
-    const bestDetection = objects
-      .map((o, i) => ({ rect: o, level: levelWeights[i] }))
-      .reduce((acc, curr) => (acc.level > curr.level ? acc : curr), {})
-
-    if (bestDetection.rect) {
-      faceDetected = true
-      tracker.init(img, bestDetection.rect)
-    }
-
-    if (!bestDetection.rect) {
-      faceDetected = false
-      tracker.clear()
-    }
-  }
-
-  if (faceDetected) img.drawRectangle(tracker.update(img))
-
-  return cv.imencode('.jpg', img).toString('base64')
+  if (!cvImg) return
+  const faceRects = await detector.locateFaces(cvImg)
+  return faceRects
+    .map(mmodRect => fr.toCvRect(mmodRect.rect))
+    .map(cvRect => cvMat.getRegion(cvRect).copy())
+    .map(faceMat => cv.imencode('.jpg', faceMat).toString('base64'))
 }
 
 const release = () => {
@@ -61,5 +48,6 @@ module.exports = {
   camera,
   open,
   decodeFrame,
+  detectFaces,
   release,
 }
