@@ -24,7 +24,17 @@ socket.on('frame', (frame) => {
   img.onload = function () {
     context.drawImage(this, 0, 0, canvas.width, canvas.height)
   }
-  img.src = 'data:image/jpg;base64,' + frame
+  img.src = 'data:image/jpg;base64,' + frame.toString()
+})
+
+socket.on('facesDetected', (frames) => {
+  frames.forEach((f, i) => {
+    const { canvas, context, img } = imgs[`face${i}`]
+    img.onload = function () {
+      context.drawImage(this, 0, 0, canvas.width, canvas.height)
+    }
+    img.src = 'data:image/jpg;base64,' + f.toString()
+  })
 })
 
 socket.on('facesDetected', (frame) => {
