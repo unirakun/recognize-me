@@ -1,24 +1,40 @@
-const clients = {}
+const { Writable } = require('stream')
 
-const get = () => Object.values(clients)
+const clientStorage = {}
+
+const get = () => Object.values(clientStorage)
 
 const add = (socket) => {
   console.log('Hello : ' + socket.id)
-  clients[socket.id] = socket
+  clientStorage[socket.id] = socket
 }
 
 const remove = (socket) => {
   console.log('Bye : ' + socket.id)
-  delete clients[socket.id]
+  delete clientStorage[socket.id]
 }
 
 const firstConnected = () => {
-  return Object.keys(clients).length === 1
+  return Object.keys(clientStorage).length === 1
 }
 
 const noConnected = () => {
-  return Object.keys(clients).length === 0
+  return Object.keys(clientStorage).length === 0
 }
+
+const emitImg = ({
+  frameName,
+  clients = Object.values(clientStorage),
+  objectMode = false,
+}) => new Writable({
+  objectMode,
+  write(chunk, encoding, callback) {
+    clients.forEach(client => {
+      client.emit(frameName, objectMode ? chunk : chunk.toString())
+    })
+    callback()
+  },
+})
 
 module.exports = {
   add,
@@ -26,4 +42,5 @@ module.exports = {
   get,
   firstConnected,
   noConnected,
+  emitImg,
 }

@@ -1,3 +1,4 @@
+const cluster = require("cluster")
 const http = require('http')
 const Koa = require('koa')
 const send = require('koa-send')
@@ -5,6 +6,8 @@ const socket = require('socket.io')
 const camera = require('./camera')
 const clients = require('./clients')
 
+const numCPUs = require("os").cpus().length
+console.log(numCPUs)
 const app = new Koa()
 
 app.use(async (ctx) => {
@@ -14,29 +17,17 @@ app.use(async (ctx) => {
 const server = http.createServer(app.callback())
 const io = socket(server)
 
-const emitFaces = async () => {
-  const { faces } = await camera.detectFaces()
-  if (!faces || faces.length === 0) return
-  clients.get().forEach(client => {
-    client.emit('facesDetected', faces)
-  })
-}
-
-const emitAll = async () => {
-  const img = await camera.decodeFrame()
-  if (!img) return
-  emitAll()
-  clients.get().forEach(client => {
-    client.emit('frame', img)
-  })
-  // emitFaces()
-}
-
 io.on('connection', async (socket) => {
   clients.add(socket)
   if (clients.firstConnected()) {
-    await camera.open()
-    emitAll()
+    const cameraReadable = await camera.open()
+    cameraReadable
+      .pipe(camera.transformToImg)
+      .pipe(clients.emitImg({ frameName: 'frame' }))
+
+    cameraReadable
+      .pipe(camera.transformToFaces)
+      .pipe(clients.emitImg({ objectMode: true, frameName: 'facesDetected' }))
   }
 
   socket.on('disconnect', () => {
@@ -47,6 +38,20 @@ io.on('connection', async (socket) => {
   })
 })
 
-server.listen(3000, () => {
-  console.log('listening...')
-})
+
+if (cluster.isMaster) {
+  let i = 0;
+
+  while (i < numCPUs) {
+    cluster.fork()
+    i++
+  }
+
+  cluster.on("exit", function (worker, code, signal) {
+    console.log("worker " + worker.process.pid + " died");
+  })
+} else {
+  server.listen(3000, () => {
+    console.log('listening...')
+  })
+}
